@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <title>문장 검열 & 복원 관리자 페이지 (React)</title>
+    <style>
+      body {
+        font-family: sans-serif;
+        padding: 2rem;
+        margin: 0;
+        background-color: #f7f7f7;
+      }
+      .header {
+        display: flex;
+        justify-content: flex-end;
+        margin-bottom: 1rem;
+      }
+      .save-button {
+        padding: 0.5rem 1rem;
+        background-color: #4caf50;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 1rem;
+      }
+      .panel {
+        background-color: white;
+        padding: 1.5rem;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        position: relative;
+        width: 90%;
+        max-width: 700px;
+        margin: 0 auto;
+      }
+      .display-text {
+        white-space: pre-wrap;
+        line-height: 1.6;
+        color: black;
+      }
+      .censored {
+        position: relative;
+        background: linear-gradient(to right, #6dadff, #fe86d7);
+        background-clip: text;
+        -webkit-background-clip: text;
+        color: transparent;
+        font-weight: bold;
+        cursor: pointer;
+        transition: filter 0.2s ease;
+      }
+      .censored:hover {
+        filter: brightness(1.2);
+      }
+      #censor-btn {
+        position: absolute;
+        z-index: 1000;
+        display: none;
+        padding: 6px 10px;
+        background: linear-gradient(to right, #6dadff, #fe86d7);
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 0.9rem;
+        font-weight: bold;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+        transition: transform 0.1s ease-in-out;
+      }
+      #censor-btn:hover {
+        transform: scale(1.3);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script
+      src="https://unpkg.com/react@18/umd/react.development.js"
+      crossorigin
+    ></script>
+    <script
+      src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"
+      crossorigin
+    ></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script type="text/babel">
+      const { useState, useEffect, useRef } = React;
+
+      const originalText = `“안녕!” 하고 그는 외쳤다. “오늘은 정말 기분이 좋아.”
+날씨는 맑고, 새들은 노래했으며… 바람도 부드러웠다.
+(사실, 이런 날씨는 흔치 않다!)
+그는 ‘행복’을 느꼈고 - 이유는 단순했다: 햇살이 좋았기 때문이다.
+“너도 느껴지지 않아?” 라며, 그는 나를 바라보았다.
+나는 고개를 끄덕이며, ‘응!’ 하고 답했다.
+그때 [작은 고양이] 한 마리가 다가왔고―우리 옆에 살포시 앉았다.
+정적… 그러나 따뜻한, 평화로운 시간이었다.
+“이런 순간이 · 삶의 진짜 의미 아닐까?”
+그는 웃으며, 나지막이 말했다: “맞아. 정말 그래.”
+
+🇺🇸 영어 번역
+"Hello!" he shouted. "I feel really good today."
+The weather was clear, the birds were singing… and the wind was gentle.
+(Actually, such weather is rare!)
+He felt ‘happiness’—for a simple reason: because the sunshine was beautiful.
+"Don’t you feel it too?" he asked, looking at me.
+I nodded and replied, "Yeah!"
+Then, a [little cat] approached and―gently sat beside us.
+Silence… but it was a warm, peaceful moment.
+"Isn’t this kind of moment · the true meaning of life?"
+He smiled and whispered, "Yes. It really is."
+
+🇯🇵 일본어 번역
+「こんにちは！」と彼は叫んだ。「今日は本当に気分がいい。」
+天気は晴れていて、鳥たちはさえずり…風もやさしかった。
+（実は、こんな天気は珍しい！）
+彼は『幸せ』を感じていた—その理由は単純だった：日差しが心地よかったからだ。
+「君も感じない？」と彼は私を見つめた。
+私はうなずいて、「うん！」と答えた。
+その時、[小さな猫]が近づいてきて―私たちのそばにそっと座った。
+静寂…でも温かくて、平和な時間だった。
+「こういう瞬間こそ · 人生の本当の意味じゃない？」
+彼は笑いながら、そっと言った：「うん。本当にそうだ。」
+
+🇨🇳 중국어 번역
+“你好！”他喊道。“今天心情真好。”
+天气晴朗，鸟儿在歌唱……风也很温柔。
+（其实，这样的天气并不常见！）
+他感到“幸福”——原因很简单：阳光很好。
+“你也有这种感觉吗？”他说着，看着我。
+我点了点头，回答：“嗯！”
+这时，一只[小猫]走过来――静静地坐在我们旁边。
+寂静……但那是温暖而平和的时刻。
+“这样的时刻 · 难道不是人生真正的意义吗？”
+他笑着低声说：“是的，真的如此。”`;
+
+      function mergeRanges(ranges) {
+        if (!ranges.length) return [];
+        const sorted = [...ranges].sort((a, b) => a.start - b.start);
+        const merged = [sorted[0]];
+        for (let i = 1; i < sorted.length; i++) {
+          const prev = merged[merged.length - 1];
+          const curr = sorted[i];
+          if (curr.start <= prev.end) {
+            prev.end = Math.max(prev.end, curr.end);
+          } else {
+            merged.push(curr);
+          }
+        }
+        return merged;
+      }
+
+      function App() {
+        const [censoredRanges, setCensoredRanges] = useState([]);
+        const [selectionRange, setSelectionRange] = useState(null);
+        const containerRef = useRef(null);
+
+        const getCharOffset = (container, node, offset) => {
+          let charCount = 0;
+          const walker = document.createTreeWalker(
+            container,
+            NodeFilter.SHOW_TEXT
+          );
+          while (walker.nextNode()) {
+            const currentNode = walker.currentNode;
+
+            if (
+              currentNode.parentElement &&
+              currentNode.parentElement.classList.contains("tooltip")
+            ) {
+              continue;
+            }
+
+            if (currentNode === node) return charCount + offset;
+            charCount += currentNode.textContent.length;
+          }
+          return null;
+        };
+
+        const handleMouseUp = () => {
+          const sel = window.getSelection();
+          if (sel && sel.toString().trim()) {
+            const range = sel.getRangeAt(0);
+            const startOffset = getCharOffset(
+              containerRef.current,
+              range.startContainer,
+              range.startOffset
+            );
+            const endOffset = getCharOffset(
+              containerRef.current,
+              range.endContainer,
+              range.endOffset
+            );
+            if (
+              startOffset != null &&
+              endOffset != null &&
+              endOffset > startOffset
+            ) {
+              const rect = range.getBoundingClientRect();
+              setSelectionRange({
+                start: startOffset,
+                end: endOffset,
+                text: originalText.slice(startOffset, endOffset),
+                top: rect.top + window.scrollY - 36,
+                left: rect.right + window.scrollX + 8,
+              });
+            }
+          } else {
+            setSelectionRange(null);
+          }
+        };
+
+        const handleCensor = () => {
+          if (selectionRange) {
+            setCensoredRanges((prev) => mergeRanges([...prev, selectionRange]));
+            setSelectionRange(null);
+            window.getSelection().removeAllRanges();
+          }
+        };
+
+        useEffect(() => {
+          document.addEventListener("mouseup", handleMouseUp);
+          return () => document.removeEventListener("mouseup", handleMouseUp);
+        }, []);
+
+        const content = [];
+        const sortedRanges = mergeRanges(censoredRanges);
+        let lastIndex = 0;
+
+        sortedRanges.forEach(({ start, end }, i) => {
+          if (start > lastIndex) {
+            content.push(
+              <span key={`normal-${i}`}>
+                {originalText.slice(lastIndex, start)}
+              </span>
+            );
+          }
+          content.push(
+            <span
+              key={`censored-${i}`}
+              className="censored"
+              onClick={() => {
+                const updated = [...censoredRanges];
+                updated.splice(i, 1);
+                setCensoredRanges(updated);
+              }}
+            >
+              {originalText.slice(start, end)}
+            </span>
+          );
+          lastIndex = end;
+        });
+
+        if (lastIndex < originalText.length) {
+          content.push(<span key="tail">{originalText.slice(lastIndex)}</span>);
+        }
+
+        return (
+          <div className="app">
+            <div className="header">
+              <button
+                className="save-button"
+                onClick={() => {
+                  const sortedRanges = [...censoredRanges].sort(
+                    (a, b) => b.start - a.start
+                  );
+                  let finalText = originalText;
+
+                  sortedRanges.forEach(({ start, end }) => {
+                    finalText =
+                      finalText.slice(0, start) +
+                      "[ 검열됨 ]" +
+                      finalText.slice(end);
+                  });
+
+                  const payload = {
+                    finalText,
+                  };
+
+                  const blob = new Blob([JSON.stringify(payload, null, 2)], {
+                    type: "application/json",
+                  });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = "censored_result.json";
+                  document.body.appendChild(a);
+                  a.click();
+                  document.body.removeChild(a);
+                  URL.revokeObjectURL(url);
+                }}
+              >
+                저장
+              </button>
+            </div>
+            <div className="panel">
+              <h2>✍️ 수정 중인 글</h2>
+              <div className="display-text" ref={containerRef}>
+                {content}
+              </div>
+            </div>
+            {selectionRange && (
+              <button
+                id="censor-btn"
+                style={{
+                  top: selectionRange.top,
+                  left: selectionRange.left,
+                  display: "block",
+                  position: "absolute",
+                }}
+                onClick={handleCensor}
+              >
+                검열
+              </button>
+            )}
+          </div>
+        );
+      }
+
+      const root = ReactDOM.createRoot(document.getElementById("root"));
+      root.render(<App />);
+    </script>
+  </body>
+</html>
